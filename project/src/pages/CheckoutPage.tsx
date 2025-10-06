@@ -21,6 +21,7 @@ export default function CheckoutPage({ onNavigate }: CheckoutPageProps) {
     country: 'United States'
   });
   const [paymentMethod, setPaymentMethod] = useState('card');
+  const [loading, setLoading] = useState(false);
 
   // Load Razorpay script
   useEffect(() => {
@@ -107,30 +108,43 @@ export default function CheckoutPage({ onNavigate }: CheckoutPageProps) {
     onNavigate('account');
   };
 
-  // Razorpay payment handler
-  const handlePlaceOrder = () => {
+  // Razorpay payment handler (client-only, no backend)
+  const handlePlaceOrder = async () => {
     if (paymentMethod === 'razorpay') {
-      const options = {
-        key: 'rzp_test_ROsJT9vvDeFiIz', // Replace with your Razorpay key
-        amount: Math.round(total * 100), // Amount in paise
-        currency: 'INR',
-        name: 'E-Commerce Website',
-        description: 'Order Payment',
-        handler: function (response: any) {
-          placeOrder(response.razorpay_payment_id);
-        },
-        prefill: {
-          name: shippingAddress.fullName,
-          email: user.email,
-          contact: shippingAddress.phone,
-        },
-        theme: {
-          color: '#6366f1',
-        },
-      };
-      // @ts-ignore
-      const rzp = new window.Razorpay(options);
-      rzp.open();
+      setLoading(true);
+      try {
+        const options = {
+          key: 'rzp_test_RPLELEOM7YjDX7', // Replace with your Razorpay key
+          amount: Math.round(total * 100), // in paise
+          currency: 'INR',
+          name: 'E-Commerce Website',
+          description: 'Order Payment',
+          handler: function (response: any) {
+            setLoading(false);
+            placeOrder(response.razorpay_payment_id);
+          },
+          prefill: {
+            name: shippingAddress.fullName,
+            email: user.email,
+            contact: shippingAddress.phone,
+          },
+          theme: {
+            color: '#6366f1',
+          },
+          modal: {
+            ondismiss: function () {
+              setLoading(false);
+              alert('Payment cancelled.');
+            }
+          }
+        };
+        // @ts-ignore
+        const rzp = new window.Razorpay(options);
+        rzp.open();
+      } catch (err) {
+        alert('Failed to initiate payment. Please try again.');
+        setLoading(false);
+      }
     } else {
       placeOrder();
     }
@@ -344,8 +358,9 @@ export default function CheckoutPage({ onNavigate }: CheckoutPageProps) {
                 <button
                   onClick={handlePlaceOrder}
                   className="mt-6 w-full py-3 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition font-semibold"
+                  disabled={loading}
                 >
-                  Place Order
+                  {loading ? 'Processing...' : 'Place Order'}
                 </button>
               )}
             </div>
