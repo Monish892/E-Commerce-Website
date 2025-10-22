@@ -23,15 +23,139 @@ export default function CheckoutPage({ onNavigate }: CheckoutPageProps) {
   const [paymentMethod, setPaymentMethod] = useState('card');
   const [loading, setLoading] = useState(false);
 
-  // Load Razorpay script
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.async = true;
-    document.body.appendChild(script);
-    return () => {
-      document.body.removeChild(script);
+  const [razorpayReady, setRazorpayReady] = useState(false);
+  const [scriptLoading, setScriptLoading] = useState(false);
+  const [scriptError, setScriptError] = useState<string | null>(null);
+  const [probeInfo, setProbeInfo] = useState<string | null>(null);
+
+  // new: allow explicit simulated payments during dev when gateway is unreachable
+  const [simulatePayments, setSimulatePayments] = useState(false);
+
+  const razorpaySrc = 'https://checkout.razorpay.com/v1/checkout.js';
+
+  // probe a URL to provide quick diagnostic (best-effort)
+  const probeUrl = async (url: string, timeout = 5000) => {
+    try {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeout);
+      // use no-cors to avoid CORS rejections — success means network reachable
+      await fetch(url, { method: 'GET', mode: 'no-cors', signal: controller.signal });
+      clearTimeout(id);
+      return { ok: true, msg: 'reachable (no-cors fetch succeeded)' };
+    } catch (err: any) {
+      const msg = err?.name === 'AbortError' ? 'timeout' : (err?.message || String(err));
+      return { ok: false, msg };
+    }
+  };
+
+  // Robust external script loader: accepts single src or array of candidate srcs
+  const loadExternalScript = (srcs: string | string[], timeout = 15000, retries = 3): Promise<boolean> => {
+    const candidates = Array.isArray(srcs) ? srcs : [srcs];
+
+    const tryLoad = (src: string, attempt = 0): Promise<boolean> => {
+      return new Promise(resolve => {
+        if ((window as any).Razorpay) return resolve(true);
+
+        const selector = `script[src="${src}"]`;
+        const existing = document.querySelector(selector) as HTMLScriptElement | null;
+        if (existing) {
+          if ((window as any).Razorpay) return resolve(true);
+          const onLoad = () => { cleanup(); resolve(!!(window as any).Razorpay); };
+          const onError = () => { cleanup(); resolve(false); };
+          function cleanup() {
+            existing.removeEventListener('load', onLoad);
+            existing.removeEventListener('error', onError);
+          }
+          existing.addEventListener('load', onLoad);
+          existing.addEventListener('error', onError);
+          setTimeout(() => resolve(!!(window as any).Razorpay), timeout);
+          return;
+        }
+
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+        script.defer = true;
+        let done = false;
+
+        const onLoad = () => {
+          if (done) return;
+          done = true;
+          setTimeout(() => resolve(!!(window as any).Razorpay), 50);
+        };
+
+        const onError = (ev?: any) => {
+          if (done) return;
+          done = true;
+          script.remove();
+          if (attempt < retries) {
+            const backoff = Math.min(2000 * Math.pow(2, attempt), 10000);
+            setTimeout(() => tryLoad(src, attempt + 1).then(resolve), backoff);
+          } else {
+            resolve(false);
+          }
+        };
+
+        script.addEventListener('load', onLoad);
+        script.addEventListener('error', onError);
+        document.head.appendChild(script);
+
+        setTimeout(() => {
+          if (!done) onError(new Error('timeout'));
+        }, timeout);
+      });
     };
+
+    return new Promise(async resolve => {
+      for (const src of candidates) {
+        if (!navigator.onLine) {
+          console.warn('Navigator is offline; script load may fail.');
+        }
+        // eslint-disable-next-line no-await-in-loop
+        const ok = await tryLoad(src);
+        if (ok) return resolve(true);
+      }
+      resolve(false);
+    });
+  };
+
+  // load script with status handling and probe diagnostics
+  const loadRazorpayScript = async () => {
+    setScriptError(null);
+    setProbeInfo(null);
+    setScriptLoading(true);
+    try {
+      // quick probe to provide better error details to developer
+      const probe = await probeUrl(razorpaySrc, 6000);
+      setProbeInfo(`probe: ${probe.ok ? 'OK' : 'FAIL'} (${probe.msg}) navigator.onLine=${navigator.onLine}`);
+      // try main host + cdn fallback
+      const ok = await loadExternalScript(
+        [razorpaySrc, 'https://cdn.razorpay.com/v1/checkout.js'],
+        20000,
+        3
+      );
+      setRazorpayReady(ok);
+      if (!ok) {
+        setScriptError(
+          `Unable to load payment gateway script. Possible causes: network timeout, adblock/CSP or corporate proxy. ${probe.ok ? '' : 'Probe indicated: ' + probe.msg}.`
+        );
+        console.error('Razorpay script failed to load. Check DevTools Network/CSP/adblock.', { probe });
+      } else {
+        setScriptError(null);
+      }
+    } catch (e) {
+      setRazorpayReady(false);
+      setScriptError('Unexpected error while loading payment gateway.');
+      console.error('Razorpay loader error:', e);
+    } finally {
+      setScriptLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRazorpayScript();
+    // keep script in DOM; no cleanup removal
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!user) {
@@ -72,8 +196,8 @@ export default function CheckoutPage({ onNavigate }: CheckoutPageProps) {
   const shippingCost = cartTotal >= 50 ? 0 : 9.99;
   const total = cartTotal + tax + shippingCost;
 
-  // Place order function
-  const placeOrder = (paymentId?: string) => {
+  // Place order function (local app state)
+  const placeOrder = (paymentId?: string, methodOverride?: string) => {
     const orderItems: OrderItem[] = cart.map(item => ({
       id: `item-${Date.now()}-${item.product.id}`,
       orderId: '',
@@ -85,6 +209,7 @@ export default function CheckoutPage({ onNavigate }: CheckoutPageProps) {
       totalPrice: item.product.price * item.quantity
     }));
 
+    const pm = methodOverride || paymentMethod;
     const order: Order = {
       id: `order-${Date.now()}`,
       userId: user.id,
@@ -97,8 +222,8 @@ export default function CheckoutPage({ onNavigate }: CheckoutPageProps) {
       shippingAddress: shippingAddress as Address,
       billingAddress: shippingAddress as Address,
       items: orderItems,
-      paymentMethod,
-      paymentStatus: paymentMethod === 'razorpay' ? (paymentId ? 'completed' : 'failed') : 'completed',
+      paymentMethod: pm,
+      paymentStatus: pm === 'razorpay' ? (paymentId ? 'completed' : 'failed') : 'completed',
       createdAt: new Date().toISOString(),
       razorpayPaymentId: paymentId || undefined,
     };
@@ -108,40 +233,89 @@ export default function CheckoutPage({ onNavigate }: CheckoutPageProps) {
     onNavigate('account');
   };
 
+  // Helper: wait for Razorpay global (short)
+  const waitForRazorpay = async (timeout = 5000) => {
+    const start = Date.now();
+    while (!(window as any).Razorpay) {
+      if (Date.now() - start > timeout) return false;
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise(r => setTimeout(r, 100));
+    }
+    return true;
+  };
+
   // Razorpay payment handler (client-only, no backend)
   const handlePlaceOrder = async () => {
     if (paymentMethod === 'razorpay') {
+      // If developer enabled simulatePayments, short-circuit to allow testing
+      if (simulatePayments) {
+        setLoading(true);
+        setTimeout(() => {
+          placeOrder('SIMULATED_PAYMENT_ID', 'simulated');
+          setLoading(false);
+        }, 250);
+        return;
+      }
+
       setLoading(true);
+
+      const amountInPaise = Math.round(total * 100);
+      if (amountInPaise < 100) {
+        alert('Minimum payable amount is ₹1. Add more items to your cart.');
+        setLoading(false);
+        return;
+      }
+
+      if (!razorpayReady) {
+        if (!scriptLoading) {
+          await loadRazorpayScript();
+        }
+        if (!razorpayReady && !(window as any).Razorpay) {
+          alert('Payment gateway failed to load. Check DevTools Network tab and probe info, disable any blockers and retry.');
+          setLoading(false);
+          return;
+        }
+      }
+
+      if (!(window as any).Razorpay) {
+        alert('Payment gateway unavailable. Please try again.');
+        setLoading(false);
+        return;
+      }
+
       try {
         const options = {
-          key: 'rzp_test_RPLELEOM7YjDX7', // Replace with your Razorpay key
-          amount: Math.round(total * 100), // in paise
+          key: 'rzp_test_RPLELEOM7YjDX7', // replace with your test key if needed
+          amount: amountInPaise,
           currency: 'INR',
           name: 'E-Commerce Website',
           description: 'Order Payment',
           handler: function (response: any) {
             setLoading(false);
-            placeOrder(response.razorpay_payment_id);
+            if (response && response.razorpay_payment_id) {
+              placeOrder(response.razorpay_payment_id);
+            } else {
+              alert('Payment completed but no payment id received.');
+            }
           },
           prefill: {
-            name: shippingAddress.fullName,
-            email: user.email,
-            contact: shippingAddress.phone,
+            name: shippingAddress.fullName || (user as any).fullName || '',
+            email: (user as any).email || '',
+            contact: shippingAddress.phone || ''
           },
-          theme: {
-            color: '#6366f1',
-          },
+          theme: { color: '#6366f1' },
           modal: {
             ondismiss: function () {
               setLoading(false);
-              alert('Payment cancelled.');
             }
           }
         };
+
         // @ts-ignore
-        const rzp = new window.Razorpay(options);
+        const rzp = new (window as any).Razorpay(options);
         rzp.open();
       } catch (err) {
+        console.error('Razorpay open error:', err);
         alert('Failed to initiate payment. Please try again.');
         setLoading(false);
       }
@@ -289,15 +463,57 @@ export default function CheckoutPage({ onNavigate }: CheckoutPageProps) {
                     <span className="font-medium">Credit/Debit Card</span>
                   </button>
 
-                  <button
-                    onClick={() => setPaymentMethod('razorpay')}
-                    className={`w-full p-4 border-2 rounded-lg flex items-center space-x-3 transition ${
-                      paymentMethod === 'razorpay' ? 'border-slate-800 bg-slate-50' : 'border-gray-200'
-                    }`}
-                  >
-                    <MapPin className="w-6 h-6" />
-                    <span className="font-medium">Razorpay</span>
-                  </button>
+                  <div>
+                    <button
+                      onClick={() => setPaymentMethod('razorpay')}
+                      className={`w-full p-4 border-2 rounded-lg flex items-center space-x-3 transition ${
+                        paymentMethod === 'razorpay' ? 'border-slate-800 bg-slate-50' : 'border-gray-200'
+                      }`}
+                    >
+                      <MapPin className="w-6 h-6" />
+                      <span className="font-medium">Razorpay</span>
+                    </button>
+
+                    {paymentMethod === 'razorpay' && !razorpayReady && (
+                      <div className="mt-3 p-3 rounded-md bg-yellow-50 border border-yellow-200 text-sm text-yellow-800">
+                        <div className="mb-2">
+                          {scriptLoading ? (
+                            <span>Loading payment gateway...</span>
+                          ) : (
+                            <div>
+                              <div>{scriptError || 'Payment gateway failed to load.'}</div>
+                              {probeInfo && <div className="mt-1 text-xs text-slate-600">{probeInfo}</div>}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => loadRazorpayScript()}
+                            className="px-3 py-1 bg-slate-800 text-white rounded text-sm"
+                          >
+                            {scriptLoading ? 'Retrying...' : 'Retry Loading Gateway'}
+                          </button>
+                          <button
+                            onClick={() => setPaymentMethod('card')}
+                            className="px-3 py-1 border border-slate-300 rounded text-sm"
+                          >
+                            Use Card Instead
+                          </button>
+
+                          {/* simulation toggle */}
+                          <button
+                            onClick={() => setSimulatePayments(v => !v)}
+                            className={`px-3 py-1 border rounded text-sm ${simulatePayments ? 'bg-green-100 border-green-300' : 'bg-white border-slate-300'}`}
+                          >
+                            {simulatePayments ? 'Simulated Payments: ON' : 'Enable Simulated Payments'}
+                          </button>
+                        </div>
+                        <div className="mt-2 text-xs text-slate-600">
+                          If loading keeps failing, open DevTools → Network and check the request to checkout.js. Use simulated payments for local/dev testing only.
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {step === 'payment' && (
