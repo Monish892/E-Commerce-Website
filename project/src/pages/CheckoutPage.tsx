@@ -285,7 +285,7 @@ export default function CheckoutPage({ onNavigate }: CheckoutPageProps) {
 
       try {
         const options = {
-          key: 'rzp_test_RPLELEOM7YjDX7', // replace with your test key if needed
+          key: 'rzp_test_ReP91msL6IjeMM', // replace with your test key if needed
           amount: amountInPaise,
           currency: 'INR',
           name: 'E-Commerce Website',
