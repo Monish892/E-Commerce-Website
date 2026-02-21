@@ -1,230 +1,274 @@
-# 🛒 E-Commerce Website (TypeScript + Razorpay Integration)
+# E-Commerce Website
 
-A full-stack E-Commerce Web Application built using **TypeScript**, featuring product listing, cart management, authentication, and secure online payments using Razorpay.
+A modern, responsive e-commerce platform built with React, TypeScript, and Tailwind CSS.
 
----
+## 📋 Table of Contents
 
-## 🚀 Features
+- [Project Overview](#project-overview)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Installation](#installation)
+- [Getting Started](#getting-started)
+- [Available Scripts](#available-scripts)
+- [Features](#features)
+- [Key Components](#key-components)
+- [Context & State Management](#context--state-management)
+- [Development Guidelines](#development-guidelines)
 
-- 🔐 JWT Authentication (Register/Login)
-- 🛍️ Product Listing & Search
-- 🛒 Add to Cart / Remove from Cart
-- 📦 Order Creation & Management
-- 💳 Razorpay Payment Integration
-- 📱 Fully Responsive UI
-- 📊 Admin Dashboard (Optional)
+## 📌 Project Overview
 
----
+This is a full-featured e-commerce application with user authentication, product browsing, shopping cart, wishlist, and checkout functionality. The application uses client-side state management and integrates with Razorpay for payment processing.
 
-## 🏗️ Tech Stack
+## 🛠 Tech Stack
 
-### Frontend
-- React
-- TypeScript
-- Axios
-- React Router
-- Tailwind CSS / CSS
-
-### Backend
-- Node.js
-- Express.js
-- TypeScript
-- MongoDB + Mongoose
-- JWT Authentication
-- Razorpay SDK
-
----
+- **Frontend Framework:** React 18+ with TypeScript
+- **Build Tool:** Vite
+- **Styling:** Tailwind CSS + PostCSS
+- **Icons:** Lucide React
+- **State Management:** React Context API
+- **Linting:** ESLint
+- **Payment Gateway:** Razorpay
+- **Development:** Node.js + npm
 
 ## 📁 Project Structure
 
 ```
-ecommerce-app/
-│
-├── frontend/
-│   ├── src/
-│   ├── components/
-│   ├── pages/
-│   └── App.tsx
-│
-├── backend/
-│   ├── controllers/
-│   ├── models/
-│   ├── routes/
-│   ├── middleware/
-│   └── server.ts
-│
-└── README.md
+project/
+├── src/
+│   ├── components/           # Reusable UI components
+│   │   ├── AuthModal.tsx      # Authentication modal
+│   │   ├── CartSidebar.tsx    # Shopping cart sidebar
+│   │   └── Header.tsx          # Main header/navigation
+│   ├── context/
+│   │   └── AppContext.tsx     # Global app state management
+│   ├── data/
+│   │   └── mockData.ts        # Mock product and user data
+│   ├── pages/                 # Page components
+│   │   ├── AccountPage.tsx    # User account & orders
+│   │   ├── CheckoutPage.tsx   # Checkout flow
+│   │   ├── HomePage.tsx       # Landing page
+│   │   ├── ProductDetailPage.tsx
+│   │   ├── ProductsPage.tsx   # Products catalog
+│   │   └── WishlistPage.tsx   # Wishlist items
+│   ├── types/
+│   │   └── index.ts           # TypeScript type definitions
+│   ├── App.tsx                # Main app component
+│   ├── main.tsx               # Entry point
+│   ├── index.css              # Global styles
+│   └── vite-env.d.ts
+├── index.html                 # HTML template
+├── package.json               # Dependencies & scripts
+├── tsconfig.json              # TypeScript configuration
+├── tailwind.config.js         # Tailwind configuration
+├── vite.config.ts             # Vite configuration
+├── eslint.config.js           # ESLint rules
+└── postcss.config.js          # PostCSS configuration
 ```
 
----
+## 🚀 Installation
 
-## ⚙️ Installation & Setup
+### Prerequisites
 
-### 1️⃣ Clone the Repository
+- Node.js (v16 or higher)
+- npm (v7 or higher)
 
-```bash
-git clone https://github.com/your-username/ecommerce-app.git
-cd ecommerce-app
-```
+### Setup Steps
 
----
+1. **Clone/Open the project:**
 
-### 2️⃣ Backend Setup
+   ```bash
+   cd project
+   ```
 
-```bash
-cd backend
-npm install
-```
+2. **Install dependencies:**
 
-Create a `.env` file inside the backend folder:
+   ```bash
+   npm install
+   ```
 
-```
-PORT=5000
-MONGO_URI=your_mongodb_connection_string
-JWT_SECRET=your_jwt_secret
-RAZORPAY_KEY_ID=your_razorpay_key_id
-RAZORPAY_KEY_SECRET=your_razorpay_secret
-```
+3. **Install any missing packages:**
+   ```bash
+   npm install
+   ```
 
-Start the backend server:
+## 🏃 Getting Started
+
+### Development Server
+
+Start the development server with hot module replacement:
 
 ```bash
 npm run dev
 ```
 
----
+The application will be available at `http://localhost:5173` (or the port Vite assigns).
 
-### 3️⃣ Frontend Setup
+### Build for Production
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
----
-
-## 💳 Razorpay Integration
-
-### Install Razorpay
+Create an optimized production build:
 
 ```bash
-npm install razorpay
+npm run build
 ```
 
----
+The build output will be in the `dist/` directory.
 
-### Backend Razorpay Configuration (TypeScript)
+### Preview Production Build
 
-```ts
-import Razorpay from "razorpay"
+Preview the production build locally:
 
-export const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID as string,
-  key_secret: process.env.RAZORPAY_KEY_SECRET as string
-})
+```bash
+npm run preview
 ```
 
----
+## 📜 Available Scripts
 
-### Create Order API
+| Script            | Description                      |
+| ----------------- | -------------------------------- |
+| `npm run dev`     | Start development server         |
+| `npm run build`   | Build for production             |
+| `npm run preview` | Preview production build         |
+| `npm run lint`    | Run ESLint to check code quality |
 
-```ts
-router.post("/create-order", async (req, res) => {
-  try {
-    const options = {
-      amount: req.body.amount * 100,
-      currency: "INR",
-      receipt: "receipt_order_1"
-    }
+## ✨ Features
 
-    const order = await razorpay.orders.create(options)
-    res.json(order)
-  } catch (error) {
-    res.status(500).json({ message: "Error creating order" })
-  }
-})
-```
+- **User Authentication** - Sign up, login, and profile management
+- **Product Browsing** - Browse products with detailed information
+- **Shopping Cart** - Add/remove items, update quantities
+- **Wishlist** - Save favorite products for later
+- **Checkout Flow** - Multi-step checkout with address and payment options
+- **Payment Gateway** - Razorpay integration for secure payments
+- **Order Management** - View order history and status
+- **Responsive Design** - Works seamlessly on desktop and mobile devices
+- **Mock Data** - Pre-loaded sample products and categories
 
----
+## 🧩 Key Components
 
-### Frontend Razorpay Payment Handler
+### Header (`components/Header.tsx`)
 
-```ts
-const handlePayment = async () => {
-  const { data } = await axios.post("/api/payment/create-order", {
-    amount: totalAmount
-  })
+Main navigation bar with logo, search, cart, and user menu.
 
-  const options = {
-    key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-    amount: data.amount,
-    currency: "INR",
-    order_id: data.id,
-    handler: function (response: any) {
-      console.log(response)
-    }
-  }
+### AuthModal (`components/AuthModal.tsx`)
 
-  const rzp = new (window as any).Razorpay(options)
-  rzp.open()
+Authentication modal for login and signup functionality.
+
+### CartSidebar (`components/CartSidebar.tsx`)
+
+Sliding sidebar showing shopping cart items with quantity controls.
+
+### AppContext (`context/AppContext.tsx`)
+
+Global state provider managing user, cart, products, orders, and authentication state.
+
+## 🔄 Context & State Management
+
+The app uses **React Context API** for state management through `AppContext`. It manages:
+
+- **User State** - Current user information
+- **Products** - Product catalog and details
+- **Cart** - Shopping cart items and totals
+- **Orders** - User's order history
+- **Wishlist** - Saved favorite products
+- **UI State** - Modal visibility, navigation
+
+Access context using:
+
+```tsx
+import { useApp } from "../context/AppContext";
+
+function MyComponent() {
+  const { user, cart, addToCart } = useApp();
+  // ...
 }
 ```
 
----
+## 📝 Development Guidelines
 
-## 🔐 Environment Variables
+### Naming Conventions
 
-| Variable | Description |
-|----------|------------|
-| MONGO_URI | MongoDB connection string |
-| JWT_SECRET | Secret key for authentication |
-| RAZORPAY_KEY_ID | Razorpay public key |
-| RAZORPAY_KEY_SECRET | Razorpay secret key |
+- **Components:** PascalCase (e.g., `ProductCard.tsx`)
+- **Functions/Variables:** camelCase (e.g., `handleAddToCart`)
+- **Constants:** UPPER_SNAKE_CASE (e.g., `DEFAULT_TIMEOUT`)
 
----
+### Adding New Pages
 
-## 📦 Available Scripts
+1. Create a new file in `src/pages/`
+2. Export a default component
+3. Add route in `App.tsx`
 
-### Backend
+### Adding New Components
 
-```bash
-npm run dev
-npm run build
+1. Create a file in `src/components/`
+2. Keep components focused and reusable
+3. Export as default or named export
+
+### Type Safety
+
+Always define TypeScript types for props and state:
+
+```tsx
+interface ComponentProps {
+  title: string;
+  onClick: () => void;
+}
+
+export default function Component({ title, onClick }: ComponentProps) {
+  // ...
+}
 ```
 
-### Frontend
+### Styling
 
-```bash
-npm run dev
-npm run build
+Use Tailwind CSS utility classes for all styling:
+
+```tsx
+<div className="flex items-center justify-between p-4 bg-white rounded-lg shadow">
+  {/* Content */}
+</div>
 ```
 
+## 🔐 Payment Integration
+
+The app integrates with **Razorpay** for payments:
+
+- Test API Key: `rzp_test_ReP91msL6IjeMM`
+- The checkout flow handles payment in `CheckoutPage.tsx`
+- Supports card payments and fallback to simulated payments for development
+
+## 📦 Dependencies
+
+Main dependencies include:
+
+- `react` - UI library
+- `react-dom` - React DOM rendering
+- `lucide-react` - Icon library
+- `tailwindcss` - Utility-first CSS framework
+
+See `package.json` for complete list.
+
+## 🐛 Troubleshooting
+
+### Port Already in Use
+
+If port 5173 is in use, Vite will automatically use the next available port.
+
+### Payment Gateway Not Loading
+
+- Check DevTools Network tab for Razorpay script
+- Disable browser extensions (adblock, etc.)
+- Check for corporate proxy/firewall blocking
+- Use simulated payments for development
+
+### TypeScript Errors
+
+- Run `npm install` to ensure all types are installed
+- Check `tsconfig.json` for configuration
+
+## 📞 Support
+
+For issues or questions, check the DevTools console for error messages and refer to component documentation.
+
 ---
 
-## 🌍 Deployment
-
-### Backend
-- Render
-- Railway
-
-### Frontend
-- Vercel
-- Netlify
-
----
-
-## 🧪 Future Improvements
-
-- Order History Page
-- Payment Signature Verification
-- Coupon & Discount System
-- Wishlist Feature
-- Admin Product Management
-- Email Notifications  
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License.
+**Last Updated:** February 2026
+**Version:** 1.0.0
