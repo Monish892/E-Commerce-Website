@@ -221,14 +221,7 @@ npm run build
 - Coupon & Discount System
 - Wishlist Feature
 - Admin Product Management
-- Email Notifications
-
----
-
-## 👨‍💻 Author
-
-Your Name  
-GitHub: https://github.com/your-username  
+- Email Notifications  
 
 ---
 
